@@ -12,6 +12,9 @@ Differences from finetune_summarization.py:
 Launch:
     accelerate launch --config_file accelerate_l40s.yaml finetune_full_epoch.py
 
+To install flash attention please refer to the beginning of `finetune_flash_attention.py`.
+Or you can just disable it.
+
 Or without a config file:
     CUDA_VISIBLE_DEVICES=0,4 accelerate launch --num_processes 2 \\
         --mixed_precision bf16 finetune_full_epoch.py
@@ -34,10 +37,6 @@ from datasets import load_dataset
 
 os.environ.setdefault("WANDB_PROJECT", "qwen3-summarization")
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
-
 MODEL_ID        = "Qwen/Qwen3-0.6B-Base"
 DATASET_NAME    = "abisee/cnn_dailymail"
 DATASET_VERSION = "3.0.0"
@@ -47,9 +46,6 @@ MAX_TARGET_LEN = 128
 
 PROMPT_TEMPLATE = "Summarize the following article.\n\n### Article:\n{article}\n\n### Summary:\n"
 
-# ---------------------------------------------------------------------------
-# GPU optimizations
-# ---------------------------------------------------------------------------
 
 @dataclass
 class GPUOpts:
@@ -65,18 +61,10 @@ class GPUOpts:
 
 GPU_OPTS = GPUOpts()
 
-# ---------------------------------------------------------------------------
-# Memory profiling (rank-0 only)
-# ---------------------------------------------------------------------------
-
 PROFILE_MEMORY          = True
 PROFILE_AT_STEP         = 3
 PROFILE_NUM_STEPS       = 3
 PROFILE_SNAPSHOT_PREFIX = "memory_snapshot_epoch"
-
-# ---------------------------------------------------------------------------
-# Trainer
-# ---------------------------------------------------------------------------
 
 class BenchmarkTrainer(Trainer):
     """
@@ -104,8 +92,6 @@ class BenchmarkTrainer(Trainer):
     @property
     def _is_main(self) -> bool:
         return self.args.process_index == 0
-
-    # -- optimizer creation --------------------------------------------------
 
     def create_optimizer(self):
         if self._is_main:
@@ -150,8 +136,6 @@ class BenchmarkTrainer(Trainer):
         print("=" * W + "\n", flush=True)
         self._state_reported = True
 
-    # -- forward / backward memory split (rank 0 only) -----------------------
-
     def compute_loss(self, model, inputs, **kwargs):
         loss = super().compute_loss(model, inputs, **kwargs)
         if self._profiling_this_step and self._is_main:
@@ -160,8 +144,6 @@ class BenchmarkTrainer(Trainer):
             self._mem_peak_fwd  = torch.cuda.max_memory_allocated()
             torch.cuda.reset_peak_memory_stats()
         return loss
-
-    # -- main step -----------------------------------------------------------
 
     def training_step(self, model, inputs, num_items_in_batch=None):
         self._bench_tokens  += inputs["input_ids"].numel()
@@ -206,8 +188,6 @@ class BenchmarkTrainer(Trainer):
 
         return loss
 
-    # -- logging -------------------------------------------------------------
-
     def log(self, logs: dict, start_time: float | None = None) -> None:
         if self._bench_t0 is not None:
             torch.cuda.synchronize()
@@ -226,8 +206,6 @@ class BenchmarkTrainer(Trainer):
             torch.cuda.reset_peak_memory_stats()
 
         super().log(logs, start_time)
-
-    # -- memory table --------------------------------------------------------
 
     def _print_memory_table(self) -> None:
         if not self._is_main:
@@ -276,10 +254,6 @@ class BenchmarkTrainer(Trainer):
         print("=" * W + "\n")
 
 
-# ---------------------------------------------------------------------------
-# Dataset helpers  (non-streaming for full-epoch training)
-# ---------------------------------------------------------------------------
-
 def build_tokenizer():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     tokenizer.pad_token    = tokenizer.eos_token
@@ -319,10 +293,6 @@ def load_full_dataset(tokenizer, split: str):
     )
 
 
-# ---------------------------------------------------------------------------
-# Model
-# ---------------------------------------------------------------------------
-
 def load_model():
     kwargs = {"dtype": torch.bfloat16 if GPU_OPTS.bf16 else torch.float32}
     if GPU_OPTS.flash_attention:
@@ -334,10 +304,6 @@ def load_model():
         )
     return model
 
-
-# ---------------------------------------------------------------------------
-# Training
-# ---------------------------------------------------------------------------
 
 def main():
     state = PartialState()  # picks up the distributed env set by accelerate launch

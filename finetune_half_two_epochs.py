@@ -15,17 +15,6 @@ Budget equivalence
 Both runs share identical hyperparameters (batch size, LR, warmup ratio,
 optimizer, precision) so the only variable is data repetition.
 
-Why this comparison matters
-───────────────────────────
-Repeating data in NLP means the model sees the same token distributions twice.
-The gradient signal from repeated examples carries no new information and can
-push weights into local minima that do not generalise.  Fresh examples — even
-fewer of them — tend to produce lower val loss and better generalisation
-because every gradient step moves in a direction informed by a novel sample.
-
-This is the empirical argument against multi-epoch training on large NLP
-datasets and is one reason GPT-style models train on each token at most once.
-
 Launch (same config as the full-epoch run):
     accelerate launch --config_file accelerate_l40s.yaml finetune_half_two_epochs.py
 """
@@ -47,10 +36,6 @@ from datasets import load_dataset
 
 os.environ.setdefault("WANDB_PROJECT", "qwen3-summarization")
 
-# ---------------------------------------------------------------------------
-# Config  —  kept identical to finetune_full_epoch.py so runs are comparable
-# ---------------------------------------------------------------------------
-
 MODEL_ID        = "Qwen/Qwen3-0.6B-Base"
 DATASET_NAME    = "abisee/cnn_dailymail"
 DATASET_VERSION = "3.0.0"
@@ -59,10 +44,6 @@ MAX_INPUT_LEN  = 1024
 MAX_TARGET_LEN = 128
 
 PROMPT_TEMPLATE = "Summarize the following article.\n\n### Article:\n{article}\n\n### Summary:\n"
-
-# ---------------------------------------------------------------------------
-# GPU optimizations  —  identical to finetune_full_epoch.py
-# ---------------------------------------------------------------------------
 
 @dataclass
 class GPUOpts:
@@ -78,18 +59,10 @@ class GPUOpts:
 
 GPU_OPTS = GPUOpts()
 
-# ---------------------------------------------------------------------------
-# Memory profiling (rank-0 only)
-# ---------------------------------------------------------------------------
-
 PROFILE_MEMORY          = True
 PROFILE_AT_STEP         = 3
 PROFILE_NUM_STEPS       = 3
 PROFILE_SNAPSHOT_PREFIX = "memory_snapshot_half2e"
-
-# ---------------------------------------------------------------------------
-# Trainer  —  identical to finetune_full_epoch.py
-# ---------------------------------------------------------------------------
 
 class BenchmarkTrainer(Trainer):
 
@@ -266,10 +239,6 @@ class BenchmarkTrainer(Trainer):
         print("=" * W + "\n")
 
 
-# ---------------------------------------------------------------------------
-# Dataset helpers
-# ---------------------------------------------------------------------------
-
 def build_tokenizer():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     tokenizer.pad_token    = tokenizer.eos_token
@@ -308,10 +277,6 @@ def load_full_dataset(tokenizer, split: str):
     )
 
 
-# ---------------------------------------------------------------------------
-# Model
-# ---------------------------------------------------------------------------
-
 def load_model():
     kwargs = {"dtype": torch.bfloat16 if GPU_OPTS.bf16 else torch.float32}
     if GPU_OPTS.flash_attention:
@@ -323,10 +288,6 @@ def load_model():
         )
     return model
 
-
-# ---------------------------------------------------------------------------
-# Training
-# ---------------------------------------------------------------------------
 
 def main():
     state = PartialState()
@@ -360,7 +321,6 @@ def main():
         full_train = load_full_dataset(tokenizer, "train")
         eval_dataset = load_full_dataset(tokenizer, "validation")
 
-    # ── Key difference: first half of training data, trained for 2 epochs ──
     half = len(full_train) // 2
     train_dataset = full_train.select(range(half))
 

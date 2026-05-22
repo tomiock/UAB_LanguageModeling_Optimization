@@ -47,10 +47,6 @@ torch.set_float32_matmul_precision('high')
 
 os.environ.setdefault("WANDB_PROJECT", "qwen3-progressive")
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
 MODEL_ID        = "Qwen/Qwen3-0.6B-Base"
 DATASET_NAME    = "abisee/cnn_dailymail"
 DATASET_VERSION = "3.0.0"
@@ -61,10 +57,6 @@ MAX_TARGET_LEN = 128
 PROMPT_TEMPLATE = "Summarize the following article.\n\n### Article:\n{article}\n\n### Summary:\n"
 
 METRICS_PATH = "metrics/progressive.json"
-
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
 
 @dataclass
 class ProgConfig:
@@ -95,10 +87,6 @@ CONFIGS = [
     ProgConfig("bs16_sac", "+bs×4\n+SAC",      16,  4,  6e-5, True,  True,  True),
     ProgConfig("bs17_sac", "+bs×5\n+SAC",      17,  4,  6e-5, True,  True,  True),
 ]
-
-# ---------------------------------------------------------------------------
-# BenchmarkTrainer — copied from finetune_flash_attention.py
-# ---------------------------------------------------------------------------
 
 class BenchmarkTrainer(Trainer):
 
@@ -135,9 +123,6 @@ class BenchmarkTrainer(Trainer):
             torch.cuda.reset_peak_memory_stats()
         super().log(logs, start_time)
 
-# ---------------------------------------------------------------------------
-# Model & tokenizer
-# ---------------------------------------------------------------------------
 
 def build_tokenizer():
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -155,10 +140,6 @@ def load_model(cfg: ProgConfig) -> torch.nn.Module:
     )
     print(f"\n  attn_implementation : {attn_impl}", flush=True)
     return model
-
-# ---------------------------------------------------------------------------
-# Dataset — dynamic padding (same as finetune_flash_attention.py)
-# ---------------------------------------------------------------------------
 
 def make_tokenize_fn(tokenizer):
     def tokenize(example):
@@ -185,10 +166,6 @@ def load_streaming_dataset(tokenizer, split: str):
     ds = load_dataset(DATASET_NAME, DATASET_VERSION, split=split, streaming=True)
     return ds.map(make_tokenize_fn(tokenizer),
                   remove_columns=["article", "highlights", "id"])
-
-# ---------------------------------------------------------------------------
-# Single-config run
-# ---------------------------------------------------------------------------
 
 def run_one(cfg: ProgConfig, tokenizer, train_ds, eval_ds, collator) -> dict:
     print(f"\n{'='*62}")
@@ -225,8 +202,8 @@ def run_one(cfg: ProgConfig, tokenizer, train_ds, eval_ds, collator) -> dict:
         # --- compilation ---
         torch_compile = cfg.compile,
         # --- schedule ---
-        max_steps         = 10,
-        warmup_steps      = 2,
+        max_steps         = 200,
+        warmup_steps      = 20,
         lr_scheduler_type = "cosine",
         # --- dataloader ---
         dataloader_num_workers     = 3,
@@ -234,7 +211,7 @@ def run_one(cfg: ProgConfig, tokenizer, train_ds, eval_ds, collator) -> dict:
         dataloader_prefetch_factor = 2,
         dataloader_drop_last       = True,
         # --- logging & saving ---
-        logging_steps = 1,
+        logging_steps = 10,
         save_strategy = "no",
         eval_strategy = "no",
         report_to     = "wandb",
@@ -281,10 +258,6 @@ def run_one(cfg: ProgConfig, tokenizer, train_ds, eval_ds, collator) -> dict:
           f"  |  tps {result['tps_avg']:,}  |  VRAM avg {result['vram_avg']:.2f} GB\n",
           flush=True)
     return result
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main():
     os.makedirs("metrics", exist_ok=True)

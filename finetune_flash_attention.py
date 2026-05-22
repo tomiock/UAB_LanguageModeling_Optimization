@@ -22,6 +22,10 @@ long (median ~700 tokens after prompt), which makes this a good benchmark.
 
 Requires:  pip install flash-attn --no-build-isolation
 
+If it does not work try to look for the compatible wheel in the FlashAttention repository. 
+
+If you cannot install it contact: 1707185@uab.cat
+
 Toggle GPU_OPTS.flash_attention and compare the two runs side-by-side in W&B.
 """
 
@@ -41,10 +45,6 @@ from datasets import load_dataset
 
 os.environ.setdefault("WANDB_PROJECT", "qwen3-flash-attention")
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
-
 MODEL_ID        = "Qwen/Qwen3-0.6B-Base"
 DATASET_NAME    = "abisee/cnn_dailymail"
 DATASET_VERSION = "3.0.0"
@@ -52,26 +52,16 @@ DATASET_VERSION = "3.0.0"
 MAX_INPUT_LEN  = 1024
 MAX_TARGET_LEN = 128
 
-# Larger batch makes the O(N²) vs O(N) memory difference more visible
 PER_DEVICE_BS  = 4
 GRAD_ACCUM     = 4
 
 PROMPT_TEMPLATE = "Summarize the following article.\n\n### Article:\n{article}\n\n### Summary:\n"
-
-# ---------------------------------------------------------------------------
-# Attention configuration — flip this to showcase the effect
-# ---------------------------------------------------------------------------
 
 @dataclass
 class AttnOpts:
     flash_attention: bool = True   # False → sdpa (standard),  True → flash_attention_2
 
 ATTN_OPTS = AttnOpts()
-
-# ---------------------------------------------------------------------------
-# Trainer — logs active tokens/s, samples/s, peak VRAM
-# ---------------------------------------------------------------------------
-
 class BenchmarkTrainer(Trainer):
 
     def _bench_reset(self):
@@ -107,9 +97,6 @@ class BenchmarkTrainer(Trainer):
             torch.cuda.reset_peak_memory_stats()
         super().log(logs, start_time)
 
-# ---------------------------------------------------------------------------
-# Tokenizer & model
-# ---------------------------------------------------------------------------
 
 def build_tokenizer():
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -127,13 +114,6 @@ def load_model():
     )
     print(f"\n  Attention implementation : {attn_impl}\n", flush=True)
     return model
-
-# ---------------------------------------------------------------------------
-# Dataset — dynamic padding (pad to longest in batch)
-# Dynamic padding shows FA2's memory advantage more clearly: real batches have
-# variable lengths so the average N is lower than the worst-case MAX_SEQ_LEN,
-# but FA2 still avoids the N×N buffer entirely.
-# ---------------------------------------------------------------------------
 
 def make_tokenize_fn(tokenizer):
     def tokenize(example):
@@ -160,10 +140,6 @@ def load_streaming_dataset(tokenizer, split: str):
     ds = load_dataset(DATASET_NAME, DATASET_VERSION, split=split, streaming=True)
     return ds.map(make_tokenize_fn(tokenizer),
                   remove_columns=["article", "highlights", "id"])
-
-# ---------------------------------------------------------------------------
-# Training
-# ---------------------------------------------------------------------------
 
 def main():
     if ATTN_OPTS.flash_attention:

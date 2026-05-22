@@ -25,10 +25,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
 import evaluate as hf_evaluate
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
-
 MODELS = {
     "1 epoch  (full data)":    "final_model_epoch",
     "2 epochs (half data)":    "final_model_half2e",
@@ -44,10 +40,6 @@ BERTSCORE_MODEL = "roberta-large"
 
 METRICS_DIR = Path("metrics")
 METRICS_DIR.mkdir(exist_ok=True)
-
-# ---------------------------------------------------------------------------
-# Generation
-# ---------------------------------------------------------------------------
 
 def load_model_and_tok(model_path: str, device: str):
     tok = AutoTokenizer.from_pretrained(model_path)
@@ -115,11 +107,6 @@ def generate_summaries(
     torch.cuda.empty_cache()
     return summaries
 
-
-# ---------------------------------------------------------------------------
-# Metrics
-# ---------------------------------------------------------------------------
-
 def compute_rouge(predictions: list[str], references: list[str]) -> dict:
     rouge = hf_evaluate.load("rouge")
     result = rouge.compute(
@@ -128,7 +115,6 @@ def compute_rouge(predictions: list[str], references: list[str]) -> dict:
         use_stemmer=True,
     )
     return {k: round(v * 100, 3) for k, v in result.items()}   # percent
-
 
 def compute_bertscore(predictions: list[str], references: list[str]) -> dict:
     bscore = hf_evaluate.load("bertscore")
@@ -146,11 +132,6 @@ def compute_bertscore(predictions: list[str], references: list[str]) -> dict:
         "bertscore_f1": round(float(np.mean(result["f1"]))        * 100, 3),
     }
 
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--batch-size",   type=int, default=32)
@@ -160,11 +141,6 @@ def parse_args():
                    help="Skip BERTScore (saves ~5 min)")
     p.add_argument("--output", default="metrics/eval_epoch_vs_repeat.json")
     return p.parse_args()
-
-
-# ---------------------------------------------------------------------------
-# Formatting helpers
-# ---------------------------------------------------------------------------
 
 def _bar(val_a, val_b, width=8):
     """Return '▲ +X.XXX' or '▼ -X.XXX' relative to val_a."""
@@ -208,11 +184,6 @@ def print_table(results: dict, include_bertscore: bool):
     print(sep + "\n")
     print("  All ROUGE scores are ×100 (percentage).  BERTScore is also ×100.")
     print("  use_stemmer=True for ROUGE;  roberta-large for BERTScore.\n")
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main():
     args   = parse_args()
@@ -260,12 +231,9 @@ def main():
         }
         print()
 
-    # Save
     out_path = Path(args.output)
     out_path.write_text(json.dumps(results, indent=2))
     print(f"  Results saved to {out_path}\n")
-
-    # Print table
     print_table(results, include_bertscore=not args.no_bertscore)
 
 
